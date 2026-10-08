@@ -17,7 +17,7 @@ MENU = """
 
 def texto_pendientes(estado: n.Estado) -> str:
     pend = n.pendientes(estado)
-    lineas = ["Pendientes (de la más grave a la menos grave):"] if pend else ["No hay emergencias pendientes."]
+    lineas = ["Pendientes (de la más urgente a la menos urgente):"] if pend else ["No hay emergencias pendientes."]
     lineas += [f"  #{e.id}  {e.gravedad:<9} {e.tipo:<9} {e.zona}" for e in pend]
     atencion = n.en_atencion(estado)
     if atencion:

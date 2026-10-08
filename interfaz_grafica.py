@@ -253,7 +253,7 @@ class App:
         # Aviso que se ve solo cuando no hay emergencias
         self.lbl_vacio = _etiqueta(marco, "Sin emergencias abiertas", fg=SUAVE, bg=PANEL2,
                                    font=(FUENTE, 11))
-        _boton(botones, "ASIGNAR UNIDAD A LA MÁS GRAVE", self._asignar, AZUL
+        _boton(botones, "ASIGNAR UNIDAD A LA MÁS URGENTE", self._asignar, AZUL
                ).pack(side="left", expand=True, fill="x", padx=(0, 6))
         _boton(botones, "CERRAR SELECCIONADA", self._cerrar, VERDE
                ).pack(side="left", expand=True, fill="x", padx=(6, 0))
@@ -390,7 +390,8 @@ class App:
         asignadas = {e.unidad: e.id for e in n.en_atencion(self.estado)}
         for u in self.estado.unidades:
             estado_u = f"● Ocupada #{asignadas[u.nombre]}" if u.ocupada else "● Libre"
-            t.insert("", "end", values=(u.nombre, estado_u, ", ".join(u.atiende)),
+            t.insert("", "end", values=(u.nombre, estado_u, ", ".join(u.atiende)
+                                     + (f" (solo {', '.join(u.zonas)})" if u.zonas else "")),
                      tags=("ocupada" if u.ocupada else "libre",))
 
     def _dibujar_zonas(self):

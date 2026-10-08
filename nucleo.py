@@ -31,6 +31,7 @@ class Unidad:
     nombre: str
     atiende: Tuple[str, ...]   # tipos de emergencia que puede atender
     ocupada: bool = False
+    zonas: Tuple[str, ...] = ()  # zonas donde puede ir; vacío = todas
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,8 @@ def estado_inicial() -> Estado:
             Unidad("Bomberos 1", ("incendio", "rescate")),
             Unidad("Bomberos 2", ("incendio", "rescate")),
             Unidad("Patrulla de rescate", ("rescate",)),
+            # Cambio 1: llega una lancha que solo hace rescates en la Ribera
+            Unidad("Lancha", ("rescate",), zonas=("Ribera",)),
         ),
         tipos=("médica", "incendio", "rescate"),
         zonas=("Centro", "Ribera", "Norte", "Sur", "Este", "Oeste"),
@@ -128,10 +131,21 @@ def prioridad(estado: Estado, e: Emergencia) -> Tuple[int, int]:
     return (-peso(estado, e.gravedad), e.id)
 
 
+def es_rescate_en_ribera(e: Emergencia) -> bool:
+    return clave(e.tipo) == "rescate" and clave(e.zona) == "ribera"
+
+
+def prioridad_ribera(estado: Estado, e: Emergencia) -> Tuple[int, int, int]:
+    """Cambio 1: los rescates en la Ribera van antes que cualquier otra
+    emergencia. Entre ellos (y entre las demás) se mantiene el orden de
+    `prioridad`: no se modifica, se COMPONE con ella."""
+    return (0 if es_rescate_en_ribera(e) else 1,) + prioridad(estado, e)
+
+
 def pendientes(estado: Estado) -> Tuple[Emergencia, ...]:
-    """Emergencias sin unidad, de la más grave a la menos grave."""
+    """Emergencias sin unidad, en orden de urgencia (ver `prioridad_ribera`)."""
     sin_unidad = (e for e in estado.emergencias if e.unidad is None)
-    return tuple(sorted(sin_unidad, key=lambda e: prioridad(estado, e)))
+    return tuple(sorted(sin_unidad, key=lambda e: prioridad_ribera(estado, e)))
 
 
 def en_atencion(estado: Estado) -> Tuple[Emergencia, ...]:
@@ -139,14 +153,21 @@ def en_atencion(estado: Estado) -> Tuple[Emergencia, ...]:
 
 
 def unidades_libres_para(estado: Estado, e: Emergencia) -> Tuple[Unidad, ...]:
-    """Unidades libres que SÍ pueden atender el tipo de esta emergencia."""
-    return tuple(u for u in estado.unidades if not u.ocupada and e.tipo in u.atiende)
+    """Unidades libres que SÍ pueden atender el tipo y la zona de esta emergencia."""
+    return tuple(u for u in estado.unidades
+                 if not u.ocupada and e.tipo in u.atiende and puede_ir(u, e.zona))
+
+
+def puede_ir(u: Unidad, zona: str) -> bool:
+    """Una unidad sin zonas va a cualquier lado; si tiene, solo a esas."""
+    return not u.zonas or zona in u.zonas
 
 
 def elegir_unidad(libres: Tuple[Unidad, ...]) -> Unidad:
     """Entre las compatibles, la más especializada (la que atiende menos
-    tipos), para no gastar una ambulancia en un rescate si hay patrulla."""
-    return min(libres, key=lambda u: len(u.atiende))
+    tipos), para no gastar una ambulancia en un rescate si hay patrulla.
+    Si empatan, la limitada a una zona (la lancha antes que la patrulla)."""
+    return min(libres, key=lambda u: (len(u.atiende), 0 if u.zonas else 1))
 
 
 def resumen_por_zona(estado: Estado) -> Tuple[Tuple[str, int, int], ...]:

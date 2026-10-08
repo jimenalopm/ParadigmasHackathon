@@ -33,7 +33,9 @@ Los mensajes aparecen en la barra inferior: verde ✔ si salió bien, rojo ✖ s
 3. Seleccione la fila #1 → *Cerrar seleccionada* → la ambulancia queda libre
 
 ## Reglas
+- **Los rescates en la Ribera van antes que cualquier otra emergencia** (Cambio 1).
 - Se atiende primero la de mayor gravedad; si empatan, la que llegó primero.
+- La **Lancha** solo hace rescates en la Ribera.
 - Cada unidad atiende una sola emergencia a la vez.
 - Si no hay unidad compatible libre, la emergencia sigue pendiente (el sistema lo avisa y atiende la siguiente que sí tenga unidad).
 - Para un rescate se prefiere la unidad más especializada (la Patrulla).
