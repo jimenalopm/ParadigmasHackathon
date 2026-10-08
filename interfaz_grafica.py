@@ -132,8 +132,10 @@ class App:
         self.root = root
         self.estado = estado or n.estado_inicial()
         root.title("Central de emergencias · Villa Paradigma")
-        root.geometry("1280x820")
-        root.minsize(1100, 740)
+        # La ventana nunca pide más alto que la pantalla (pantallas chicas o con zoom)
+        alto = min(820, root.winfo_screenheight() - 80)
+        root.geometry(f"1280x{alto}")
+        root.minsize(1000, min(600, alto))
         root.configure(bg=FONDO)
         self._estilos()
         self._construir_encabezado()
@@ -194,7 +196,7 @@ class App:
         cuerpo.grid(row=1, column=0, sticky="nsew", padx=14, pady=(14, 0))
         self.root.rowconfigure(1, weight=1)
         cuerpo.columnconfigure(1, weight=1)   # la lista central se estira
-        cuerpo.rowconfigure(0, weight=1, minsize=490)
+        cuerpo.rowconfigure(0, weight=1, minsize=360)
 
         self._construir_formulario(cuerpo).grid(row=0, column=0, sticky="ns")
         self._construir_lista(cuerpo).grid(row=0, column=1, sticky="nsew", padx=12)
@@ -242,13 +244,15 @@ class App:
         caja = _panel(padre, "Emergencias abiertas (más urgentes arriba)")
         marco, self.tabla = _tabla(caja, [("id", "#", 40, "center"), ("gravedad", "Gravedad", 90, "w"),
                                           ("tipo", "Tipo", 85, "w"), ("zona", "Zona", 75, "w"),
-                                          ("estado", "Estado", 190, "w")], altura=12)
+                                          ("estado", "Estado", 190, "w")], altura=8)
+        # Los botones se empaquetan ANTES que la tabla (abajo): así nunca quedan
+        # cortados aunque la ventana sea baja; la que se achica es la tabla.
+        botones = tk.Frame(caja, bg=PANEL)
+        botones.pack(side="bottom", fill="x", padx=14, pady=14)
         marco.pack(fill="both", expand=True, padx=14)
         # Aviso que se ve solo cuando no hay emergencias
         self.lbl_vacio = _etiqueta(marco, "Sin emergencias abiertas", fg=SUAVE, bg=PANEL2,
                                    font=(FUENTE, 11))
-        botones = tk.Frame(caja, bg=PANEL)
-        botones.pack(fill="x", padx=14, pady=14)
         _boton(botones, "ASIGNAR UNIDAD A LA MÁS GRAVE", self._asignar, AZUL
                ).pack(side="left", expand=True, fill="x", padx=(0, 6))
         _boton(botones, "CERRAR SELECCIONADA", self._cerrar, VERDE
@@ -410,8 +414,9 @@ class App:
         """Si las tarjetas de zona ocupan más filas, agranda la ventana para que
         los demás paneles no se corten."""
         self.root.update_idletasks()
-        if self.root.winfo_reqheight() > self.root.winfo_height():
-            self.root.geometry(f"{self.root.winfo_width()}x{self.root.winfo_reqheight()}")
+        alto = min(self.root.winfo_reqheight(), self.root.winfo_screenheight() - 80)
+        if alto > self.root.winfo_height():
+            self.root.geometry(f"{self.root.winfo_width()}x{alto}")
 
 
 def iniciar():
