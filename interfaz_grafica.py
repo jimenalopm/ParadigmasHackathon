@@ -364,7 +364,11 @@ class App:
         marco, self.tabla_unidades = _tabla(
             caja, [("nombre", "Unidad", 140, "w"), ("estado", "Estado", 115, "w"),
                    ("atiende", "Atiende", 130, "w")])
-        marco.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+        # Liberar una unidad = cerrar la emergencia que está atendiendo
+        _boton(caja, "LIBERAR UNIDAD SELECCIONADA", self._liberar, VERDE
+               ).pack(side="bottom", fill="x", padx=14, pady=14)
+        marco.pack(fill="both", expand=True, padx=14)
+        self.tabla_unidades.bind("<Double-1>", lambda _e: self._liberar())
         return caja
 
     def _construir_zonas(self):
@@ -403,6 +407,16 @@ class App:
         if not seleccion:
             return self._mensaje("Seleccione primero una emergencia de la lista.", False)
         self._aplicar(n.cerrar(self.estado, int(seleccion[0])))   # el iid es el id
+
+    def _liberar(self):
+        seleccion = self.tabla_unidades.selection()
+        if not seleccion:
+            return self._mensaje("Seleccione primero una unidad ocupada.", False)
+        nombre = seleccion[0]                                     # el iid es el nombre
+        e = next((x for x in n.en_atencion(self.estado) if x.unidad == nombre), None)
+        if e is None:
+            return self._mensaje(f"{nombre} ya está libre.", False)
+        self._aplicar(n.cerrar(self.estado, e.id))
 
     def _dialogo_unidad(self):
         DialogoAgregar(self, "Agregar unidad", "Nombre de la unidad:",
@@ -495,7 +509,7 @@ class App:
         asignadas = {e.unidad: e.id for e in n.en_atencion(self.estado)}
         for u in self.estado.unidades:
             estado_u = f"● Ocupada #{asignadas[u.nombre]}" if u.ocupada else "● Libre"
-            t.insert("", "end", values=(u.nombre, estado_u, ", ".join(u.atiende)
+            t.insert("", "end", iid=u.nombre, values=(u.nombre, estado_u, ", ".join(u.atiende)
                                      + (f" (solo {', '.join(u.zonas)})" if u.zonas else "")),
                      tags=("ocupada" if u.ocupada else "libre",))
 
