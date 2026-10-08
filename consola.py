@@ -18,7 +18,10 @@ MENU = """
 def texto_pendientes(estado: n.Estado) -> str:
     pend = n.pendientes(estado)
     lineas = ["Pendientes (de la más urgente a la menos urgente):"] if pend else ["No hay emergencias pendientes."]
-    lineas += [f"  #{e.id}  {e.gravedad:<9} {e.tipo:<9} {e.zona}" for e in pend]
+    lineas += [f"  #{e.id}  {n.gravedad_efectiva(estado, e):<9} {e.tipo:<9} {e.zona:<7}"
+               + (f" (era {e.gravedad}, subió por espera)"
+                  if n.gravedad_efectiva(estado, e) != e.gravedad else "")
+               for e in pend]
     atencion = n.en_atencion(estado)
     if atencion:
         lineas.append("En atención:")

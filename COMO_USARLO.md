@@ -35,6 +35,7 @@ Los mensajes aparecen en la barra inferior: verde ✔ si salió bien, rojo ✖ s
 ## Reglas
 - **Los rescates en la Ribera van antes que cualquier otra emergencia** (Cambio 1).
 - Se atiende primero la de mayor gravedad; si empatan, la que llegó primero.
+- **Regla justa** (Cambio 2): por cada 3 emergencias nuevas que llegan mientras una sigue pendiente, esta sube un nivel de gravedad (hasta *muy alta*). En la lista se ve con una flecha (`ALTA ↑ · era baja`). La gravedad registrada no se borra.
 - La **Lancha** solo hace rescates en la Ribera.
 - Cada unidad atiende una sola emergencia a la vez.
 - Si no hay unidad compatible libre, la emergencia sigue pendiente (el sistema lo avisa y atiende la siguiente que sí tenga unidad).

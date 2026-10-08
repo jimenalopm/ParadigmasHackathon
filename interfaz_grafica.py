@@ -11,6 +11,7 @@ Así la pantalla nunca puede quedar distinta del estado real del sistema.
 """
 import tkinter as tk
 from tkinter import ttk, simpledialog
+from tkinter import font as tkfont
 
 import nucleo as n
 
@@ -25,21 +26,77 @@ ETIQUETAS_POLITICA = {"rechazar": "Rechazar nuevas",
 ZONAS_POR_FILA = 8    # cuántas tarjetas de zona caben en una fila
 
 
-def _aclarar(color: str, f: float = 0.18) -> str:
-    """Mezcla un color '#rrggbb' con blanco (para el efecto al pasar el mouse)."""
+def _mezclar(color: str, con: int, f: float) -> str:
+    """Mezcla un color '#rrggbb' con blanco (con=255) o negro (con=0)."""
     r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
-    return "#%02x%02x%02x" % tuple(int(c + (255 - c) * f) for c in (r, g, b))
+    return "#%02x%02x%02x" % tuple(int(c + (con - c) * f) for c in (r, g, b))
+
+
+def _aclarar(color: str, f: float = 0.18) -> str:
+    return _mezclar(color, 255, f)
+
+
+def _oscurecer(color: str, f: float = 0.35) -> str:
+    return _mezclar(color, 0, f)
+
+
+def _rect_redondeado(lienzo, x1, y1, x2, y2, r, **opts):
+    """Rectángulo con esquinas redondeadas (polígono suavizado)."""
+    puntos = (x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2,
+              x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1)
+    return lienzo.create_polygon(puntos, smooth=True, **opts)
+
+
+class _BotonRedondeado(tk.Canvas):
+    """Botón con esquinas redondeadas, sombra, efecto al pasar el mouse y al
+    presionar. Se dibuja en un Canvas porque tk.Button no permite bordes redondos."""
+    SOMBRA, RADIO = 3, 9
+
+    def __init__(self, parent, texto, comando, color, padx=12, pady=8,
+                 font=(FUENTE, 10, "bold"), fg="white"):
+        fuente = tkfont.Font(font=font)
+        alto = fuente.metrics("linespace") + 2 * pady + self.SOMBRA
+        super().__init__(parent, width=fuente.measure(texto) + 2 * padx, height=alto,
+                         bg=parent.cget("bg"), highlightthickness=0, bd=0, cursor="hand2")
+        self.texto, self.comando, self.color = texto, comando, color
+        self.fuente, self.fg = fuente, fg
+        self.encima = self.presionado = False
+        self.bind("<Configure>", lambda _e: self._dibujar())
+        self.bind("<Enter>", lambda _e: self._estado(encima=True))
+        self.bind("<Leave>", lambda _e: self._estado(encima=False, presionado=False))
+        self.bind("<ButtonPress-1>", lambda _e: self._estado(presionado=True))
+        self.bind("<ButtonRelease-1>", self._soltar)
+
+    def _estado(self, **cambios):
+        for k, v in cambios.items():
+            setattr(self, k, v)
+        self._dibujar()
+
+    def _soltar(self, evento):
+        dentro = 0 <= evento.x <= self.winfo_width() and 0 <= evento.y <= self.winfo_height()
+        fue_click = self.presionado and dentro
+        self._estado(presionado=False)
+        if fue_click:
+            self.comando()
+
+    def _dibujar(self):
+        self.delete("all")
+        ancho, alto = self.winfo_width(), self.winfo_height()
+        if ancho < 2 or alto < 2:
+            return
+        r, s = self.RADIO, self.SOMBRA
+        bajada = s - 1 if self.presionado else 0   # al presionar, el botón "se hunde"
+        relleno = _aclarar(self.color) if self.encima and not self.presionado else self.color
+        _rect_redondeado(self, 0, s, ancho - 1, alto - 1, r, fill=_oscurecer(self.color))
+        _rect_redondeado(self, 0, bajada, ancho - 1, alto - 1 - s + bajada, r,
+                         fill=relleno, outline=_aclarar(self.color, 0.25))
+        self.create_text(ancho / 2, (alto - s) / 2 + bajada, text=self.texto,
+                         fill=self.fg, font=self.fuente)
 
 
 def _boton(parent, texto, comando, color, **opts):
-    """Botón plano con color y efecto hover. `opts` pisa los valores por defecto."""
-    base = dict(bg=color, fg="white", activebackground=_aclarar(color),
-                activeforeground="white", relief="flat", bd=0, padx=12, pady=8,
-                cursor="hand2", font=(FUENTE, 10, "bold"))
-    b = tk.Button(parent, text=texto, command=comando, **{**base, **opts})
-    b.bind("<Enter>", lambda _e: b.config(bg=_aclarar(color)))
-    b.bind("<Leave>", lambda _e: b.config(bg=color))
-    return b
+    """Botón redondeado con color. `opts` admite padx, pady, font y fg."""
+    return _BotonRedondeado(parent, texto, comando, color, **opts)
 
 
 def _etiqueta(parent, texto, **opts):
@@ -139,6 +196,7 @@ class App:
         root.configure(bg=FONDO)
         self._estilos()
         self._construir_encabezado()
+        self._construir_area()
         self._construir_cuerpo()
         self._construir_zonas()
         self._construir_barra_estado()
@@ -191,10 +249,52 @@ class App:
         self.lbl_aviso = _etiqueta(medidor, "", fg=AMBAR, font=(FUENTE, 9))
         self.lbl_aviso.pack(anchor="e", pady=(4, 0))
 
-    def _construir_cuerpo(self):
-        cuerpo = tk.Frame(self.root, bg=FONDO)
-        cuerpo.grid(row=1, column=0, sticky="nsew", padx=14, pady=(14, 0))
+    def _construir_area(self):
+        """Zona central con desplazamiento vertical: si la ventana es más baja que
+        el contenido (pantalla chica o con zoom) aparece una barra en lugar de
+        cortar los paneles y sus botones."""
+        marco = tk.Frame(self.root, bg=FONDO)
+        marco.grid(row=1, column=0, sticky="nsew")
         self.root.rowconfigure(1, weight=1)
+        self.lienzo = tk.Canvas(marco, bg=FONDO, highlightthickness=0, bd=0)
+        self.barra_area = ttk.Scrollbar(marco, orient="vertical", command=self.lienzo.yview)
+        self.lienzo.configure(yscrollcommand=self.barra_area.set)
+        self.lienzo.pack(side="left", fill="both", expand=True)
+        self.area = tk.Frame(self.lienzo, bg=FONDO)
+        self.area.columnconfigure(0, weight=1)
+        self.area.rowconfigure(0, weight=1)   # los paneles de arriba se estiran
+        self.ventana_area = self.lienzo.create_window(0, 0, window=self.area, anchor="nw")
+        self.lienzo.bind("<Configure>", lambda _e: self._ajustar_area())
+        self.root.bind_all("<MouseWheel>", self._rueda)
+        self.root.bind_all("<Button-4>", self._rueda)    # Linux
+        self.root.bind_all("<Button-5>", self._rueda)
+
+    def _ajustar_area(self):
+        """El contenido ocupa al menos el alto visible; si no entra, se desplaza."""
+        visible, necesario = self.lienzo.winfo_height(), self.area.winfo_reqheight()
+        alto = max(visible, necesario)
+        self.lienzo.itemconfigure(self.ventana_area, width=self.lienzo.winfo_width(), height=alto)
+        self.lienzo.configure(scrollregion=(0, 0, self.lienzo.winfo_width(), alto))
+        if necesario > visible:
+            if not self.barra_area.winfo_ismapped():
+                self.barra_area.pack(side="right", fill="y")
+        elif self.barra_area.winfo_ismapped():
+            self.barra_area.pack_forget()
+            self.lienzo.yview_moveto(0)
+
+    def _rueda(self, evento):
+        """Rueda del mouse: mueve la página, salvo sobre listas o desplegables
+        (que tienen su propio desplazamiento) o en otras ventanas."""
+        w = evento.widget
+        if (isinstance(w, str) or isinstance(w, (ttk.Treeview, ttk.Combobox))
+                or w.winfo_toplevel() is not self.root or not self.barra_area.winfo_ismapped()):
+            return
+        arriba = evento.num == 4 or getattr(evento, "delta", 0) > 0
+        self.lienzo.yview_scroll(-1 if arriba else 1, "units")
+
+    def _construir_cuerpo(self):
+        cuerpo = tk.Frame(self.area, bg=FONDO)
+        cuerpo.grid(row=0, column=0, sticky="nsew", padx=14, pady=(14, 0))
         cuerpo.columnconfigure(1, weight=1)   # la lista central se estira
         cuerpo.rowconfigure(0, weight=1, minsize=360)
 
@@ -242,7 +342,7 @@ class App:
 
     def _construir_lista(self, padre):
         caja = _panel(padre, "Emergencias abiertas (más urgentes arriba)")
-        marco, self.tabla = _tabla(caja, [("id", "#", 40, "center"), ("gravedad", "Gravedad", 90, "w"),
+        marco, self.tabla = _tabla(caja, [("id", "#", 40, "center"), ("gravedad", "Gravedad", 105, "w"),
                                           ("tipo", "Tipo", 85, "w"), ("zona", "Zona", 75, "w"),
                                           ("estado", "Estado", 190, "w")], altura=8)
         # Los botones se empaquetan ANTES que la tabla (abajo): así nunca quedan
@@ -268,15 +368,15 @@ class App:
         return caja
 
     def _construir_zonas(self):
-        caja = _panel(self.root, "Resumen por zona")
-        caja.grid(row=2, column=0, sticky="ew", padx=14, pady=14)
+        caja = _panel(self.area, "Resumen por zona")
+        caja.grid(row=1, column=0, sticky="ew", padx=14, pady=14)
         self.marco_zonas = tk.Frame(caja, bg=PANEL)
         self.marco_zonas.pack(fill="x", padx=14, pady=(0, 14))
 
     def _construir_barra_estado(self):
         self.lbl_estado = tk.Label(self.root, text="", anchor="w", bg=PANEL, fg=TEXTO,
                                    font=(FUENTE, 10), padx=16, pady=8)
-        self.lbl_estado.grid(row=3, column=0, sticky="ew")
+        self.lbl_estado.grid(row=2, column=0, sticky="ew")
 
     # ------------------------------------------------------------ Acciones
     def _aplicar(self, resultado: n.Resultado) -> bool:
@@ -369,8 +469,13 @@ class App:
             self.tabla.tag_configure(f"g_{g}", foreground=self._color_gravedad(g))
         self.tabla.tag_configure("atencion", foreground=SUAVE)
         for e in n.pendientes(est):
-            self.tabla.insert("", "end", iid=str(e.id), tags=(f"g_{e.gravedad}",),
-                              values=(e.id, e.gravedad.upper(), e.tipo, e.zona, "Pendiente"))
+            # Cambio 2: si subió por la espera, se muestra la nueva y la original
+            g = n.gravedad_efectiva(est, e)
+            subio = g != e.gravedad
+            self.tabla.insert("", "end", iid=str(e.id), tags=(f"g_{g}",),
+                              values=(e.id, g.upper() + (" ↑" if subio else ""), e.tipo, e.zona,
+                                      f"Pendiente · era {e.gravedad}, subió por espera"
+                                      if subio else "Pendiente"))
         for e in sorted(n.en_atencion(est), key=lambda x: x.id):
             self.tabla.insert("", "end", iid=str(e.id), tags=("atencion",),
                               values=(e.id, e.gravedad.upper(), e.tipo, e.zona,
@@ -409,15 +514,9 @@ class App:
                       ).pack()
             _etiqueta(tarjeta, f"{aten} en atención", bg=PANEL2, fg=AZUL if aten else SUAVE
                       ).pack(pady=(0, 8))
-        self._ajustar_ventana()
-
-    def _ajustar_ventana(self):
-        """Si las tarjetas de zona ocupan más filas, agranda la ventana para que
-        los demás paneles no se corten."""
+        # Si aparecen más filas de tarjetas, se recalcula el desplazamiento
         self.root.update_idletasks()
-        alto = min(self.root.winfo_reqheight(), self.root.winfo_screenheight() - 80)
-        if alto > self.root.winfo_height():
-            self.root.geometry(f"{self.root.winfo_width()}x{alto}")
+        self._ajustar_area()
 
 
 def iniciar():

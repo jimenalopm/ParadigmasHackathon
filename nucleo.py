@@ -23,6 +23,7 @@ from typing import Optional, Tuple
 MAX_NOMBRE = 30          # largo máximo de nombres de unidades, tipos y zonas
 CAPACIDAD_MAXIMA = 999   # límite razonable para la capacidad configurable
 POLITICAS = ("rechazar", "reemplazar")  # qué hacer cuando se llena el tope
+REGISTROS_PARA_SUBIR = 3  # Cambio 2: cada 3 registros nuevos de espera, sube un nivel
 
 
 # ------------------------------------------------------------------- Datos
@@ -131,6 +132,29 @@ def prioridad(estado: Estado, e: Emergencia) -> Tuple[int, int]:
     return (-peso(estado, e.gravedad), e.id)
 
 
+def espera(estado: Estado, e: Emergencia) -> int:
+    """Cuántas emergencias se registraron después de esta (su antigüedad)."""
+    return estado.siguiente_id - 1 - e.id
+
+
+def gravedad_efectiva(estado: Estado, e: Emergencia) -> str:
+    """Cambio 2 (regla justa): por cada REGISTROS_PARA_SUBIR emergencias nuevas
+    que llegan mientras esta sigue pendiente, sube un nivel de gravedad, hasta
+    el máximo. Así ninguna zona queda siempre olvidada. La gravedad registrada
+    NO se modifica: la efectiva se CALCULA cada vez a partir de la espera."""
+    if e.unidad is not None:
+        return e.gravedad
+    subidas = espera(estado, e) // REGISTROS_PARA_SUBIR
+    return estado.gravedades[min(peso(estado, e.gravedad) + subidas,
+                                 len(estado.gravedades) - 1)]
+
+
+def prioridad_justa(estado: Estado, e: Emergencia) -> Tuple[int, int]:
+    """La misma `prioridad` de siempre, pero aplicada a una COPIA de la
+    emergencia con su gravedad efectiva (el original queda intacto)."""
+    return prioridad(estado, replace(e, gravedad=gravedad_efectiva(estado, e)))
+
+
 def es_rescate_en_ribera(e: Emergencia) -> bool:
     return clave(e.tipo) == "rescate" and clave(e.zona) == "ribera"
 
@@ -138,8 +162,8 @@ def es_rescate_en_ribera(e: Emergencia) -> bool:
 def prioridad_ribera(estado: Estado, e: Emergencia) -> Tuple[int, int, int]:
     """Cambio 1: los rescates en la Ribera van antes que cualquier otra
     emergencia. Entre ellos (y entre las demás) se mantiene el orden de
-    `prioridad`: no se modifica, se COMPONE con ella."""
-    return (0 if es_rescate_en_ribera(e) else 1,) + prioridad(estado, e)
+    `prioridad_justa` (Cambio 2): no se modifica, se COMPONE con ella."""
+    return (0 if es_rescate_en_ribera(e) else 1,) + prioridad_justa(estado, e)
 
 
 def pendientes(estado: Estado) -> Tuple[Emergencia, ...]:
@@ -205,7 +229,7 @@ def registrar(estado: Estado, tipo, zona, gravedad) -> Resultado:
         puede_reemplazar = (
             estado.politica_tope == "reemplazar"
             and desplazable is not None
-            and peso(estado, g) > peso(estado, desplazable.gravedad)
+            and peso(estado, g) > peso(estado, gravedad_efectiva(estado, desplazable))
         )
         if not puede_reemplazar:
             return _fallo(estado, f"Capacidad llena ({estado.capacidad} emergencias abiertas). "
